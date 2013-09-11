@@ -1,13 +1,6 @@
 #ifndef RDB_PROTOCOL_MINI_DRIVER_HPP_
 #define RDB_PROTOCOL_MINI_DRIVER_HPP_
 
-#if 0
-#define MINIDRIVER_DEBUG(code) code
-#include <iostream>
-#else
-#define MINIDRIVER_DEBUG(ignore)
-#endif
-
 #include <string>
 #include <vector>
 
@@ -131,30 +124,17 @@ public:
 
     template <typename ... T>
     reql_t call(Term_TermType type, T&& ... args) const /* & */ {
-        MINIDRIVER_DEBUG(std::cout << "Copying *this for const call\n";)
         return copy().call(type, std::forward<T>(args) ...);
     }
 
     template <typename ... T>
     reql_t call(Term_TermType type, T&& ... args) /* && */ {
-        MINIDRIVER_DEBUG({
-                std::cout << "Calling " << type << " on *this = ";
-                if (term.has()) {
-                    term->PrintDebugString();
-                } else {
-                    std::cout << "NULL\n";
-                }
-            })
         reql_t ret(make_scoped<Term>());
         ret.term->set_type(type);
         if (term.has()) {
             ret.add_arg(std::move(*this));
         }
         ret.add_args(std::forward<T>(args) ...);
-        MINIDRIVER_DEBUG({
-                std::cout << "Result of call: ";
-                ret.term->PrintDebugString();
-            })
         return ret;
     }
 
@@ -164,14 +144,6 @@ public:
 
     reql_t copy() const {
         reql_t ret;
-        MINIDRIVER_DEBUG({
-                std::cout << "copying this ";
-                if (term.has()) {
-                    term->PrintDebugString();
-                } else {
-                    std::cout << "NULL\n";
-                }
-            })
         if (term.has()) {
             ret.term = make_scoped<Term>(*term);
         }
@@ -243,10 +215,6 @@ private:
     template<typename T>
     void add_arg(T&& a){
         reql_t it(std::forward<T>(a));
-        MINIDRIVER_DEBUG({
-                std::cout << "Adding arg ";
-                it.term->PrintDebugString();
-            })
         term->mutable_args()->AddAllocated(it.term.release());
     }
 
@@ -275,10 +243,6 @@ inline void reql_t::add_arg(key_value&& kv){
     auto ap = make_scoped<Term_AssocPair>();
     ap->set_key(kv.first);
     ap->mutable_val()->Swap(kv.second.term.get());
-    MINIDRIVER_DEBUG({
-       std::cout << "Adding optarg ";
-       ap->PrintDebugString();
-    })
     term->mutable_optargs()->AddAllocated(ap.release());
 }
 
