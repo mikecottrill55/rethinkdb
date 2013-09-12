@@ -273,7 +273,7 @@ bool func_t::filter_call(counted_t<const datum_t> arg) {
 
 counted_t<func_t> func_t::new_constant_func(env_t *env, counted_t<const datum_t> obj,
                                             const protob_t<const Backtrace> &bt_src) {
-    protob_t<Term> twrap = ql::r.fun(obj).release_counted();
+    protob_t<Term> twrap = ql::r.fun(r.expr(obj)).release_counted();
     propagate_backtrace(twrap.get(), bt_src.get());
     return make_counted<func_t>(env, twrap);
 }

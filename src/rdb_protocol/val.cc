@@ -125,8 +125,8 @@ std::vector<counted_t<const datum_t> > table_t::batch_replace(
                 counted_t<const datum_t> replacement =
                     replacement_generator->call(original_values[i])->as_datum();
 
-                ql::reql_t::var_t x(*env);
-                ql::reql_t t = ql::r.fun(x, replacement);
+                reql_t::var_t x(env);
+                reql_t t = r.fun(x, r.expr(replacement));
                 propagate(&t.get());
 
                 funcs[i] = map_wire_func_t(t.get(), std::map<int64_t, Datum>());
@@ -150,13 +150,13 @@ std::vector<counted_t<const datum_t> > table_t::batch_replace(
     std::vector<datum_func_pair_t> pairs(original_values.size());
     for (size_t i = 0; i < original_values.size(); ++i) {
         try {
-            ql::reql_t::var_t x(*env);
-            ql::reql_t t =
-                ql::r.fun(x,
-                          upsert ? ql::r.expr(replacement_values[i]) :
-                          ql::r.branch(x == ql::r.null(),
-                                       replacement_values[i],
-                                       ql::r.error("Duplicate primary key.")));
+            reql_t::var_t x(env);
+            reql_t t =
+                r.fun(x,
+                      upsert ? r.expr(replacement_values[i]) :
+                      r.branch(x == r.null(),
+                               replacement_values[i],
+                               r.error("Duplicate primary key.")));
             propagate(&t.get());
             funcs[i] = map_wire_func_t(t.get(), std::map<int64_t, Datum>());
             pairs[i] = datum_func_pair_t(original_values[i], &funcs[i]);
@@ -362,13 +362,13 @@ counted_t<const datum_t> table_t::do_replace(counted_t<const datum_t> orig,
                                              bool upsert,
                                              durability_requirement_t durability_requirement,
                                              bool return_vals) {
-    ql::reql_t::var_t x(*env);
-    ql::reql_t t =
-        ql::r.fun(x,
-                  upsert ? ql::r.expr(d) :
-                  ql::r.branch(x == ql::r.null(),
-                               d,
-                               ql::r.error("Duplicate primary key.")));
+    reql_t::var_t x(env);
+    reql_t t =
+        r.fun(x,
+              upsert ? r.expr(d) :
+              r.branch(x == r.null(),
+                       d,
+                       r.error("Duplicate primary key.")));
     propagate(&t.get());
     return do_replace(orig, map_wire_func_t(t.get(), std::map<int64_t, Datum>()),
                       durability_requirement, return_vals);

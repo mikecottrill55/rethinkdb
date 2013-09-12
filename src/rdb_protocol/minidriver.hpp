@@ -1,8 +1,10 @@
-#ifndef RDB_PROTOCOL_MINI_DRIVER_HPP_
-#define RDB_PROTOCOL_MINI_DRIVER_HPP_
+#ifndef RDB_PROTOCOL_MINIDRIVER_HPP_
+#define RDB_PROTOCOL_MINIDRIVER_HPP_
 
 #include <string>
 #include <vector>
+#include <utility>
+#include <algorithm>
 
 #include "rdb_protocol/env.hpp"
 #include "rdb_protocol/ql2.pb.h"
@@ -11,27 +13,15 @@
 
 namespace ql {
 
-/** fill_vector(vector, elements...)
- *
- * push_back each element onto the vector
- *
- **/
-
-template<typename E>
-inline void fill_vector(std::vector<E>&) { }
-
-template<typename E, typename H, typename ... T>
-inline void fill_vector(std::vector<E>& v, H&& x, T&& ... xs){
-    v.push_back(std::forward<H>(x));
-    fill_vector(v, std::forward<T>(xs) ...);
-}
+class reql_t;
+extern const reql_t r;
 
 /** reql_t
  *
  * A thin wrapper around scoped_ptr_t<Term> that allows building Terms
  * using the ReQL syntax.
  *
- * Move semantics are used to avoid copying the inner Term.
+ * Move semantics are used for non-const reql_t to avoid copying the inner Term.
  *
  * - Non-const *this is treated like an rvalue reference. Store reql_t
  *   values in const variables or use .copy() if you use the same
@@ -42,93 +32,62 @@ inline void fill_vector(std::vector<E>& v, H&& x, T&& ... xs){
 
 class reql_t {
 private:
-    class pvar;
-    friend class pvar;
+    class variable;
+    friend class variable;
 public:
 
-    typedef const pvar var_t;
-
-    static const reql_t r;
+    typedef const variable var_t;
 
     typedef std::pair<std::string, reql_t> key_value;
 
-    reql_t(scoped_ptr_t<Term>&& term_) : term(std::move(term_)) { }
-
-    reql_t(const double val) { set_datum(datum_t(val)); }
-    reql_t(const std::string& val) { set_datum(datum_t(val.c_str())); }
-    reql_t(const datum_t &d) { set_datum(d); }
-    reql_t(const counted_t<const datum_t> &d) { set_datum(*d.get()); }
-
-    static reql_t boolean(bool b){
-        return reql_t(datum_t(datum_t::R_BOOL, b));
+    static reql_t make_r(){
+        return reql_t();
     }
 
-    static reql_t expr(const datum_t& d){
-        return reql_t(d);
+    explicit reql_t(scoped_ptr_t<Term> &&term_);
+    explicit reql_t(const double val);
+    explicit reql_t(const std::string &val);
+    explicit reql_t(const datum_t &d);
+    explicit reql_t(const counted_t<const datum_t> &d);
+    explicit reql_t(const Datum &d);
+    explicit reql_t(const Term &t);
+    explicit reql_t(std::vector<reql_t> &&val);
+
+    reql_t(const reql_t &other);
+    reql_t(reql_t &&other);
+    reql_t &operator= (const reql_t &other);
+    reql_t &operator= (reql_t &&other);
+
+    template <class T>
+    static reql_t expr(T &&d){
+        return reql_t(std::forward<T>(d));
     }
 
-    static reql_t expr(const counted_t<const datum_t>& d){
-        return reql_t(d);
+    static reql_t boolean(bool b);
+
+    static reql_t fun(reql_t &&body);
+    static reql_t fun(const variable &a, reql_t &&body);
+    static reql_t fun(const variable &a, const variable &b, reql_t &&body);
+
+    static reql_t array() {
+        return r.call(Term::MAKE_ARRAY);
     }
 
-    static reql_t expr(const Datum& d){
-        reql_t ret = make_scoped<Term>();
-        ret.term->set_type(Term::DATUM);
-        *ret.term->mutable_datum() = d;
-        return ret;
+    template<class T, class ... Ts>
+    static reql_t array(T &&x, Ts &&... xs) {
+        return reql_t(make_vector(reql_t(std::forward<T>(x)),
+                                  reql_t(std::forward<T>(xs)) ...));
     }
 
-    static reql_t expr(const Term& t){
-        return reql_t(make_scoped<Term>(t));
-    }
+    static reql_t null();
 
-    reql_t(std::vector<reql_t>&& val) : term(make_scoped<Term>()) {
-        term->set_type(Term::MAKE_ARRAY);
-        for (auto i = val.begin(); i != val.end(); i++) {
-            add_arg(std::move(*i));
-        }
-    }
-
-    reql_t(const reql_t& other) : term(make_scoped<Term>(*other.term.get())) { }
-
-    reql_t(reql_t&& other) : term(std::move(other.term)) { }
-
-    reql_t& operator= (const reql_t& other){
-        auto t = make_scoped<Term>(*other.term);
-        term.swap(t);
-        return *this;
-    }
-
-    reql_t& operator= (reql_t&& other){
-        term.swap(other.term);
-        return *this;
-    }
-
-    static reql_t fun(reql_t&& body);
-    static reql_t fun(const pvar& a, reql_t&& body);
-    static reql_t fun(const pvar& a, const pvar& b, reql_t&& body);
-
-    template<typename ... T>
-    static reql_t array(T&& ... a){
-        std::vector<reql_t> v;
-        fill_vector(v, std::forward<T>(a) ...);
-        return reql_t(std::move(v));
-    }
-
-    static reql_t null() {
-        auto t = make_scoped<Term>();
-        t->set_type(Term::DATUM);
-        t->mutable_datum()->set_type(Datum::R_NULL);
-        return reql_t(std::move(t));
-    }
-
-    template <typename ... T>
-    reql_t call(Term_TermType type, T&& ... args) const /* & */ {
+    template <class ... T>
+    reql_t call(Term_TermType type, T &&... args) const /* & */ {
         return copy().call(type, std::forward<T>(args) ...);
     }
 
-    template <typename ... T>
-    reql_t call(Term_TermType type, T&& ... args) /* && */ {
+    template <class ... T>
+    reql_t call(Term_TermType type, T &&... args) /* && */ {
         reql_t ret(make_scoped<Term>());
         ret.term->set_type(type);
         if (term.has()) {
@@ -138,59 +97,40 @@ public:
         return ret;
     }
 
-    key_value optarg(const std::string& key, reql_t&& value){
-        return key_value(key, std::move(value));
-    }
+    key_value optarg(const std::string &key, reql_t &&value);
 
-    reql_t copy() const {
-        reql_t ret;
-        if (term.has()) {
-            ret.term = make_scoped<Term>(*term);
-        }
-        return ret;
-    }
+    reql_t copy() const;
 
-    Term* release(){
-        return term.release();
-    }
+    Term* release();
 
-    Term& get(){
-        return *term;
-    }
+    Term &get();
 
-    protob_t<Term> release_counted(){
-        protob_t<Term> ret = make_counted_term();
-        auto t = scoped_ptr_t<Term>(term.release());
-        ret->Swap(t.get());
-        return ret;
-    }
+    protob_t<Term> release_counted();
 
-    void swap(Term& t){
-        t.Swap(term.get());
-    }
+    void swap(Term &t);
 
 #define REQL_METHOD(name, termtype)                             \
-    template<typename ... T>                                    \
-    reql_t name(T&& ... a) /* && */                             \
+    template<class ... T>                                       \
+    reql_t name(T &&... a) /* && */                             \
     { return call(Term::termtype, std::forward<T>(a) ...); }    \
-    template<typename ... T>                                    \
-    reql_t name(T&& ... a) const /* & */                        \
+    template<class ... T>                                       \
+    reql_t name(T &&... a) const /* & */                        \
     { return call(Term::termtype, std::forward<T>(a) ...); }
 
-    REQL_METHOD(operator+, ADD)
-    REQL_METHOD(operator==, EQ)
-    REQL_METHOD(operator(), FUNCALL)
-    REQL_METHOD(operator>, GT)
-    REQL_METHOD(operator<, LT)
-    REQL_METHOD(operator>=, GE)
-    REQL_METHOD(operator<=, LE)
-    REQL_METHOD(operator&&, ALL)
+    REQL_METHOD(operator +, ADD)
+    REQL_METHOD(operator ==, EQ)
+    REQL_METHOD(operator (), FUNCALL)
+    REQL_METHOD(operator >, GT)
+    REQL_METHOD(operator <, LT)
+    REQL_METHOD(operator >=, GE)
+    REQL_METHOD(operator <=, LE)
+    REQL_METHOD(operator &&, ALL)
     REQL_METHOD(count, COUNT)
     REQL_METHOD(map, MAP)
     REQL_METHOD(db, DB)
     REQL_METHOD(branch, BRANCH)
     REQL_METHOD(error, ERROR)
-    REQL_METHOD(operator[], GET_FIELD)
+    REQL_METHOD(operator [], GET_FIELD)
     REQL_METHOD(nth, NTH)
     REQL_METHOD(pluck, PLUCK)
 
@@ -198,56 +138,40 @@ public:
 
 private:
 
-    void set_datum(const datum_t &d) {
-        term = make_scoped<Term>();
-        term->set_type(Term::DATUM);
-        d.write_to_protobuf(term->mutable_datum());
+    void set_datum(const datum_t &d);
+
+    template <class ... T>
+    void add_args(T &&... args){
+        UNUSED int _[] = { (add_arg(std::forward<T>(args)), 1) ... };
     }
 
-    void add_args(){ };
-
-    template <typename A, typename ... T>
-    void add_args(A&& a, T&& ... args){
-        add_arg(std::forward<A>(a));
-        add_args(std::forward<T>(args) ...);
-    }
-
-    template<typename T>
-    void add_arg(T&& a){
+    template<class T>
+    void add_arg(T &&a){
         reql_t it(std::forward<T>(a));
         term->mutable_args()->AddAllocated(it.term.release());
     }
 
-    reql_t() : term(NULL) { }
+    reql_t();
 
     scoped_ptr_t<Term> term;
 };
 
-class reql_t::pvar : public reql_t {
+class reql_t::variable : public reql_t {
 public:
     int id;
-    pvar(env_t& env) : reql_t(), id(env.gensym()) {
-       term = r.call(Term::VAR, static_cast<double>(id)).term;
-    }
-    pvar(env_t *env) : reql_t(), id(env->gensym()) {
-       term = r.call(Term::VAR, static_cast<double>(id)).term;
-    }
-    pvar(int id_) : reql_t(), id(id_) {
-       term = r.call(Term::VAR, static_cast<double>(id)).term;
-    }
-    pvar(const pvar& var) : reql_t(var.copy()), id(var.id) { }
+    explicit variable(env_t *env);
+    explicit variable(int id_);
+    explicit variable(const variable &var);
 };
 
 template <>
-inline void reql_t::add_arg(key_value&& kv){
+inline void reql_t::add_arg(key_value &&kv){
     auto ap = make_scoped<Term_AssocPair>();
     ap->set_key(kv.first);
     ap->mutable_val()->Swap(kv.second.term.get());
     term->mutable_optargs()->AddAllocated(ap.release());
 }
 
-extern const reql_t& r;
-
 } // namespace ql
 
-#endif // RDB_PROTOCOL_MINI_DRIVER_HPP_
+#endif // RDB_PROTOCOL_MINIDRIVER_HPP_
