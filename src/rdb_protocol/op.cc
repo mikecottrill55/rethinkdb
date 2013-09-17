@@ -104,7 +104,7 @@ counted_t<func_t> op_term_t::lazy_literal_optarg(const std::string &key) {
     std::map<std::string, counted_t<term_t> >::iterator it = optargs.find(key);
     if (it != optargs.end()) {
         protob_t<Term> func(make_counted_term());
-        ql::r.fun(ql::r.expr(*it->second->get_src().get())).swap(*func.get());
+        r::fun(r::expr(*it->second->get_src().get())).swap(*func.get());
         return make_counted<func_t>(env, func);
     }
     return counted_t<func_t>();

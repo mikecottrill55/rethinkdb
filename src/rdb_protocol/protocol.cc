@@ -1659,24 +1659,24 @@ region_t rdb_protocol_t::cpu_sharding_subspace(int subregion_number,
 
 void rdb_protocol_t::sindex_range_t::write_filter_func(
     ql::env_t *env, Term *filter, const Term &sindex_mapping) const {
-    ql::reql_t::var_t arg1(env);
+    const ql::r::var_t arg1(env);
 
     if (!start.has() && !end.has()) {
-        ql::r.fun(arg1, ql::r.boolean(true)).swap(*filter);
+        ql::r::fun(arg1, ql::r::boolean(true)).swap(*filter);
         return;
     }
 
-    ql::reql_t::var_t sindex_val(env);
+    const ql::r::var_t sindex_val(env);
 
-    ql::reql_t predicate =
-        ql::r.fun(sindex_val,
-                  ( !start.has() ? ql::r.boolean(true) :
+    ql::r::reql_t predicate =
+        ql::r::fun(sindex_val,
+                  ( !start.has() ? ql::r::boolean(true) :
                     start_open ? sindex_val > start : sindex_val >= start)
                   && (
-                      !end.has() ? ql::r.boolean(true) :
+                      !end.has() ? ql::r::boolean(true) :
                       end_open ? sindex_val < end : sindex_val <= end)
                   );
-    ql::r.fun(arg1, predicate(ql::r.expr(sindex_mapping)(arg1))).swap(*filter);
+    ql::r::fun(arg1, predicate(ql::r::expr(sindex_mapping)(arg1))).swap(*filter);
 }
 
 region_t rdb_protocol_t::sindex_range_t::to_region() const {

@@ -13,8 +13,7 @@
 
 namespace ql {
 
-class reql_t;
-extern const reql_t r;
+namespace r {
 
 /** reql_t
  *
@@ -23,26 +22,14 @@ extern const reql_t r;
  *
  * Move semantics are used for non-const reql_t to avoid copying the inner Term.
  *
- * - Non-const *this is treated like an rvalue reference. Store reql_t
- *   values in const variables or use .copy() if you use the same
- *   reql_t more than once. GCC < 4.8 has no support for explicit
- *   rvalue references for *this, so they are commented out.
- *
  **/
 
+class var_t;
+
 class reql_t {
-private:
-    class variable;
-    friend class variable;
 public:
 
-    typedef const variable var_t;
-
     typedef std::pair<std::string, reql_t> key_value;
-
-    static reql_t make_r(){
-        return reql_t();
-    }
 
     explicit reql_t(scoped_ptr_t<Term> &&term_);
     explicit reql_t(const double val);
@@ -58,52 +45,28 @@ public:
     reql_t &operator= (const reql_t &other);
     reql_t &operator= (reql_t &&other);
 
-    template <class T>
-    static reql_t expr(T &&d){
-        return reql_t(std::forward<T>(d));
+    template <class ... T>
+    reql_t(Term_TermType type, T &&... args) : term(make_scoped<Term>()) {
+        term->set_type(type);
+        add_args(std::forward<T>(args) ...);
     }
-
-    static reql_t boolean(bool b);
-
-    static reql_t fun(reql_t &&body);
-    static reql_t fun(const variable &a, reql_t &&body);
-    static reql_t fun(const variable &a, const variable &b, reql_t &&body);
-
-    static reql_t array() {
-        return r.call(Term::MAKE_ARRAY);
-    }
-
-    template<class T, class ... Ts>
-    static reql_t array(T &&x, Ts &&... xs) {
-        return reql_t(make_vector(reql_t(std::forward<T>(x)),
-                                  reql_t(std::forward<T>(xs)) ...));
-    }
-
-    static reql_t null();
 
     template <class ... T>
     reql_t call(Term_TermType type, T &&... args) const /* & */ {
-        return copy().call(type, std::forward<T>(args) ...);
+        reql_t copy(*this);
+        return reql_t(type, std::move(copy), std::forward<T>(args) ...);
     }
 
     template <class ... T>
     reql_t call(Term_TermType type, T &&... args) /* && */ {
-        reql_t ret(make_scoped<Term>());
-        ret.term->set_type(type);
-        if (term.has()) {
-            ret.add_arg(std::move(*this));
-        }
-        ret.add_args(std::forward<T>(args) ...);
-        return ret;
+        return reql_t(type, std::move(*this), std::forward<T>(args) ...);
     }
-
-    key_value optarg(const std::string &key, reql_t &&value);
-
-    reql_t copy() const;
 
     Term* release();
 
     Term &get();
+
+    const Term &get() const;
 
     protob_t<Term> release_counted();
 
@@ -127,9 +90,6 @@ public:
     REQL_METHOD(operator &&, ALL)
     REQL_METHOD(count, COUNT)
     REQL_METHOD(map, MAP)
-    REQL_METHOD(db, DB)
-    REQL_METHOD(branch, BRANCH)
-    REQL_METHOD(error, ERROR)
     REQL_METHOD(operator [], GET_FIELD)
     REQL_METHOD(nth, NTH)
     REQL_METHOD(pluck, PLUCK)
@@ -138,39 +98,78 @@ public:
 
 private:
 
+    reql_t();
+
     void set_datum(const datum_t &d);
 
     template <class ... T>
-    void add_args(T &&... args){
+    void add_args(T &&... args) {
         UNUSED int _[] = { (add_arg(std::forward<T>(args)), 1) ... };
     }
 
     template<class T>
-    void add_arg(T &&a){
+    void add_arg(T &&a) {
         reql_t it(std::forward<T>(a));
         term->mutable_args()->AddAllocated(it.term.release());
     }
 
-    reql_t();
-
     scoped_ptr_t<Term> term;
+
+    friend class var_t;
 };
 
-class reql_t::variable : public reql_t {
+class var_t : public reql_t {
 public:
     int id;
-    explicit variable(env_t *env);
-    explicit variable(int id_);
-    explicit variable(const variable &var);
+    explicit var_t(env_t *env);
+    explicit var_t(int id_);
+    explicit var_t(const var_t &var);
 };
 
 template <>
-inline void reql_t::add_arg(key_value &&kv){
+inline void reql_t::add_arg(key_value &&kv) {
     auto ap = make_scoped<Term_AssocPair>();
     ap->set_key(kv.first);
     ap->mutable_val()->Swap(kv.second.term.get());
     term->mutable_optargs()->AddAllocated(ap.release());
 }
+
+template <class T>
+reql_t expr(T &&d) {
+    return reql_t(std::forward<T>(d));
+}
+
+reql_t boolean(bool b);
+
+reql_t fun(reql_t &&body);
+reql_t fun(const var_t &a, reql_t &&body);
+reql_t fun(const var_t &a, const var_t &b, reql_t &&body);
+
+template<class ... Ts>
+reql_t array(Ts &&... xs) {
+    return reql_t(Term::MAKE_ARRAY, std::forward<Ts>(xs) ...);
+}
+
+reql_t null();
+
+reql_t::key_value optarg(const std::string &key, reql_t &&value);
+
+reql_t db(const std::string &name);
+
+template <class T>
+reql_t error(T &&message) {
+    return reql_t(Term::ERROR, std::forward<T>(message));
+}
+
+template<class Cond, class Then, class Else>
+reql_t branch(Cond &&a, Then &&b, Else &&c) {
+    return reql_t(Term::BRANCH,
+                  std::forward<Cond>(a),
+                  std::forward<Then>(b),
+                  std::forward<Else>(c));
+}
+
+} // namepsace r
 
 } // namespace ql
 

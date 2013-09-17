@@ -204,7 +204,7 @@ void run(protob_t<Query> q, scoped_ptr_t<env_t> *env_ptr,
                 }
             }
 
-            ql::reql_t arg = ql::r.db("test");
+            r::reql_t arg = r::db("test");
 
             propagate_backtrace(&arg.get(), t_bt); // duplicate toplevel backtrace
             UNUSED bool _b = env->add_optarg("db", arg.get());

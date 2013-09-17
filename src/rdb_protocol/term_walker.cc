@@ -37,7 +37,7 @@ public:
         add_bt(t, parent, frame);
 
         if (t->type() == Term::NOW && t->args_size() == 0) {
-            *t = ql::r.expr(*curtime.get()).get();
+            *t = r::expr(*curtime.get()).get();
         }
 
         if (t->type() == Term::ASC || t->type() == Term::DESC) {

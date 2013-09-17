@@ -32,8 +32,8 @@ public:
         if (num_args() == 3) {
             index_func = arg(2)->as_func();
         } else {
-            ql::reql_t::var_t x(env);
-            protob_t<Term> func_term = ql::r.fun(x, x[name_datum]).release_counted();
+            const r::var_t x(env);
+            protob_t<Term> func_term = r::fun(x, x[name_datum]).release_counted();
 
             prop_bt(func_term.get());
             index_func = make_counted<func_t>(env, func_term);
