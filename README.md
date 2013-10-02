@@ -5,7 +5,7 @@ RethinkDB is an open-source distributed database. It has an intuitive
 query language, automatically parallelized queries, and simple
 administration.
 
-To get started, checkout www.rethinkdb.com!
+
 
 Quick start
 -----------
